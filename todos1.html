@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>To Do List</title>
+		<style>
+			.empty {
+				border-color: red;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="app">
+			<input type="text" placeholder="add todo..." v-model="value" :class="{empty: !count}"/>
+			<input type="button" value="发送" @click="send" />
+			<div v-if="count">Todo的内容是： {{ value }}</div>
+			<div>字数：{{ count }}</div>
+		</div>
+	</body>
+	<script src="vue.js" type="text/javascript" charset="UTF-8"></script>
+	<script>
+		/*
+		  V0.0.1 支持todo内容输入
+		*/
+		var app = new Vue({
+			el: '#app',
+			data: function () {
+				return {value: ''}
+			},
+			computed: {
+				count () {
+					return this.value.trim().length
+				}
+			},
+			methods: {
+				send () {
+					if (!this.count) {
+						alert('您好，请先输入要发送的内容，谢谢！')
+					}
+					alert('发送成功!')
+					this.value = ''
+					
+				}
+			}			
+		})
+	</script>
+</html>
