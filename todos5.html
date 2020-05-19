@@ -13,10 +13,13 @@
 			.empty {
 				border-color: red;
 			}
+			[v-cloak] {
+				display: none;
+			}
 		</style>
 	</head>
 	<body>
-		<div id="todo-app">
+		<div id="todo-app" v-cloak>
 			<div>
 				<span>Todo：</span>
 				<input
@@ -30,52 +33,112 @@
 			</div>
 			<!-- todo list -->
 			<ul>
-				<li v-for="todo in filteredTodos" :key="todo.id">
-					<span :class="{completed: todo.completed}" @dblclick="editTodo(todo)">{{ todo.title }}</span>
-					<input v-if="!todo.completed" type="button" value="标为完成" @click="todo.completed = true" />
-					<input v-else type="button" value="标为未完成" @click="todo.completed = false" />
-					<input v-if="!todo.removed" type="button" value="删除" @click="removeTodo(todo)" />
-					<input v-else type="button" value="还原" @click="todo.removed = false" />
-					<input type="text" value="编辑todo..." 
-						v-if="editedTodo !== null && editedTodo.id === todo.id"
-						v-model="todo.title"
-						v-focus="true"
-						@keyup.enter="editDone(todo)"
-						@keyup.esc="cancelEdit(todo)" />
-				</li>
+				<todo-item v-for="todo in filteredTodos" :todo="todo" :key="todo.id" @remove-todo="removeTodo"></todo-item>
 			</ul>
 			<!-- 其他 -->
 			<div  v-if="todos.length">
-				<span v-if="leftTodosCount">剩余 {{ todos.filter(todo => !todo.completed).length }} 项未完成！</span>
+				<span v-if="filterType === 'completed'">已完成 {{ completedTodosCount }} 个事项!</span>
+				<span v-else-if="filterType === 'removed'">共计删除了 {{ removedTodosCount }} 个事项！</span>
+				<span v-else-if="leftTodosCount">剩余 {{ leftTodosCount }} 项未完成！</span>
 				<span v-else>全部完成，你真是太棒了！</span>
 				<br />
 				<span>操作：</span>
-				<input type="button" v-if="leftTodosCount" value="全部标为完成" @click="todos.map(todo => todo.completed = true)" />
-				<input type="button" v-if="completedTodosCount" value="清除已完成" @click="clearCompletedTodos" />
+				<input type="button" value="全部标为完成" v-if="leftTodosCount" @click="markAllAsCompletedTodo" />
+				<input type="button" value="清除已完成" v-if="completedTodosCount" @click="clearCompletedTodos" />
 				<input type="button" value="清除全部" @click="clearAllTodos" />
-				<input v-if="filterType === 'removed' && removedTodosCount" type="button" value="全部还原" 
+				<input type="button" value="全部还原" v-if="filterType === 'removed' && removedTodosCount" 
 					@click="todos.map(todo => todo.removed = false)" />
-				<input v-if="filterType === 'removed' && removedTodosCount" type="button" value="清空回收站" 
+				<input type="button" value="清空回收站" v-if="filterType === 'removed' && removedTodosCount" 
 					@click="todos = todos.filter(todo => !todo.removed)" />
 				<br />
 				<span>筛选：</span>
-				<input type="button" :class="{selected: filterType === 'all'}" 
-					value="全部" @click="filterType='all'" />
-				<input v-if="leftTodosCount" type="button" :class="{selected: filterType === 'ongoing'}" 
-					value="进行中" @click="filterType='ongoing'" />
-				<input v-if="completedTodosCount" type="button" :class="{selected: filterType === 'completed'}" 
-					value="已完成" @click="filterType='completed'" />				
-				<input v-if="removedTodosCount" type="button" :class="{selected: filterType === 'removed'}" 
-					value="回收站" @click="filterType = 'removed'" />
+				<input type="button" value="全部" :class="{selected: filterType === 'all'}" 
+					@click="filterType='all'" />
+				<input type="button" value="进行中" v-if="leftTodosCount" :class="{selected: filterType === 'ongoing'}" 
+					@click="filterType='ongoing'" />
+				<input type="button" value="已完成" v-if="completedTodosCount" :class="{selected: filterType === 'completed'}" 
+					@click="filterType='completed'" />				
+				<input type="button" value="回收站" v-if="removedTodosCount" :class="{selected: filterType === 'removed'}" 
+					@click="filterType = 'removed'" />
 			</div>
 			<div v-else>添加我的第一个todo!</div>
 		</div>
 		<!-- JavaScript脚本 -->
 		<script src="vue.js" type="text/javascript" charset="UTF-8"></script>
+		<!-- todo item 模板 -->
+		<script type="text/x-template" id="todo-item-tpl">
+			<li>
+				<span :class="{completed: todo.completed}" @dblclick="editTodo(todo)">{{ todo.title }}</span>
+				<input type="button" value="标为完成" v-if="!todo.completed" @click="todo.completed = true" />
+				<input value="标为未完成" type="button" v-else @click="todo.completed = false" />
+				<input type="button" value="删除" v-if="!todo.removed" @click="removeTodo(todo)" />
+				<input type="button" value="还原" v-else @click="todo.removed = false" />
+				<input type="text" value="编辑todo..." 
+					v-if="isEditing"
+					v-model="todo.title"
+					v-focus="true"
+					@keyup.enter="editDone(todo)"
+					@keyup.esc="cancelEdit(todo)" />
+			</li>
+		</script>
 		<script>
 			/*
-			  V0.0.4 todo list支持本地持久化功能
+			  V0.0.5 todo list代码风格优化与todo item组件化
 			*/
+		   
+		   // 注册todo-item组件
+		   Vue.component('todo-item', {
+			   template: '#todo-item-tpl',
+			   data: function(){
+				   return {
+					   editedTodo: null  // 暂存用户当前编辑的todo
+				   }
+			   },
+			   props: {
+				   todo: {  // 父组件通过props向子组件传递数据
+					   type: Object,
+					   required: true,
+				   },
+			   },
+			   computed: {
+				   isEditing(){
+					   return this.editedTodo !== null && this.editedTodo.id === this.todo.id
+				   }
+			   },
+			   methods: {
+				   // removeTodo(todo){
+				   // 	if(confirm('您确定要删除这个todo么？') === true){	
+				   // 		todo.removed = true
+				   // 	}
+				   // },
+				   removeTodo(todo){
+					   if(confirm('您确定要删除这个todo么？') === true){
+						   this.$emit('remove-todo', todo)  // 子组件通过事件向父组件传递消息
+					   }
+				   },
+				   editTodo(todo){
+				   	this.editedTodo = {id: todo.id, title: todo.title, completed: todo.completed, removed: todo.removed}
+				   },
+				   editDone(todo){
+				   	this.editedTodo = null
+				   	if(!todo.title){
+				   		this.removeTodo(todo)
+				   	}
+				   },
+				   cancelEdit(todo){
+				   	todo.title = this.editedTodo.title
+				   	this.editedTodo = null
+				   },
+			   },
+			   directives: {
+				   focus: {
+					   inserted(el){
+						   el.focus()
+					   }
+				   }
+			   },
+		   })
+		   
 			// 使用浏览器LocalStorage来实现数据的持久化（只要用户不删除缓存即可）
 			var STORAGE_KEY = 'todo-list-with-vue2.x'
 			var todoStorage = {
@@ -97,8 +160,6 @@
 						todos: todoStorage.fetch(),
 						newTodoTitle: '',
 						isCheckEmpty: false,
-						recycleBin: [],  // 存放已删除的todo
-						editedTodo: null,  // 暂存用户当前编辑的todo
 						filterType: 'all',  // all所有todo（默认，不含已删除的）、ongoing正在进行的todo、completed已完成的todo、removed已删除的todo
 					}
 				},
@@ -118,7 +179,7 @@
 						return this.todos.filter(todo => !todo.completed && !todo.removed)
 					},
 					leftTodosCount(){
-						if(this.leftTodos.length === 0){
+						if(this.leftTodos.length === 0 && this.filterType === 'ongoing'){
 							this.filterType = 'all'
 						}
 						return this.leftTodos.length
@@ -127,7 +188,7 @@
 						return this.todos.filter(todo => todo.completed && !todo.removed)
 					},
 					completedTodosCount(){
-						if(this.completedTodos.length === 0){
+						if(this.completedTodos.length === 0 && this.filterType === 'completed'){
 							this.filterType = 'all'
 						}
 						return this.completedTodos.length
@@ -136,7 +197,7 @@
 						return this.todos.filter(todo => todo.removed)
 					},
 					removedTodosCount(){
-						if(this.removedTodos.length === 0){
+						if(this.removedTodos.length === 0  && this.filterType === 'removed'){
 							this.filterType = 'all'
 						}
 						return this.removedTodos.length
@@ -164,23 +225,8 @@
 						this.newTodoTitle = ''
 												
 					},
-					removeTodo(todo){
-						if (confirm('您确定要删除这个todo么？') === true) {	
-							todo.removed = true
-						}
-					},
-					editTodo(todo){
-						this.editedTodo = {id: todo.id, title: todo.title, completed: todo.completed, removed: todo.removed}
-					},
-					editDone(todo){
-						this.editedTodo = null
-						if(!todo.title){
-							this.removeTodo(todo)
-						}
-					},
-					cancelEdit(todo){
-						todo.title = this.editedTodo.title
-						this.editedTodo = null
+					markAllAsCompletedTodo(){
+						this.leftTodos.map(todo => todo.completed = true)
 					},
 					clearCompletedTodos(){
 						if(confirm('您确定要清除已完成的todo么？') === true){
@@ -195,7 +241,10 @@
 						if(confirm('您确定要清除所有的todo么？') === true){
 							this.todos.map(todo => todo.removed = true)
 						}
-					},					
+					},
+					removeTodo(todo){
+						todo.removed = true
+					}
 				},
 				directives: {
 					focus: {
